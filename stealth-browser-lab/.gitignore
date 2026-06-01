@@ -1,0 +1,6 @@
+node_modules/
+results/
+user-data/
+*.log
+.DS_Store
+package-lock.json
