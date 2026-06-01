@@ -1,6 +1,8 @@
-node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 results/
 user-data/
 *.log
 .DS_Store
-package-lock.json

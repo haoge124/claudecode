@@ -1,6 +1,6 @@
-# stealth-browser-lab 🥷
+# stealth-browser-lab 🥷 (Python / async)
 
-**Playwright によるステルス・ブラウザ自動化の学習＆練習ラボ。**
+**Playwright (async) によるステルス・ブラウザ自動化の学習＆練習ラボ。**
 指紋(fingerprint)偽装、人間らしいマウス軌跡（WindMouse）、人間らしいタイピングを
 小さなモジュールに分けて、「なぜそれが効くのか」を理解しながら触れるようにしています。
 
@@ -15,14 +15,21 @@
 
 ```
 ┌ AIエージェント層     : agent-browser / Codex （AIが操作を判断）
-├ 自動化ライブラリ層   : Playwright / Puppeteer  ← このラボはここ
+├ 自動化ライブラリ層   : Playwright / Puppeteer  ← このラボはここ（Python API）
 ├ 通信プロトコル層     : CDP (Chrome DevTools Protocol)
 └ ブラウザ本体         : Chromium (headless / headed)
 ```
 
-- **Playwright** は「本物のブラウザを運転する道具」。だから単純な検出は素通りできる。
-- ただし **デフォルトは検出される**（`navigator.webdriver` などの足跡）。
-- そこで「足跡を消す（ステルス）」「指紋を整える」「人間らしく動く」の3点を足すのがこのラボの主題。
+- **Playwright** は「本物のブラウザを運転する道具」。Python 公式 API がある。
+- デフォルトの自動化は **検出される**（`navigator.webdriver` などの足跡）。
+- そこで「足跡を消す」「指紋を整える」「人間らしく動く」の3点を足すのがこのラボ。
+
+### 🐍 sync と async の違い（よくある誤解）
+- これは **プロセス数の話ではありません**。Playwright API の“書き方のスタイル”の違い。
+- **sync**: `await` 不要で逐次実行。読みやすく学習向き。
+- **async**: `async`/`await` + `asyncio`。複数ページ/サイトを **1スレッドで並行** に捌きやすい。
+- どちらも基本シングルスレッド。`multiprocessing`（複数プロセス並列）とは別物。
+- **このラボは async 版**。多サイトを同時に回したい時に強い。
 
 ---
 
@@ -30,97 +37,97 @@
 
 ```
 stealth-browser-lab/
-├── src/
-│   ├── utils.js          # 乱数・正規分布・sleep（人間っぽさの土台）
-│   ├── humanMouse.js     # WindMouse による人間らしいマウス軌跡
-│   ├── humanType.js      # 打鍵間隔のばらつき＋タイプミス訂正
-│   ├── fingerprint.js    # Canvas/WebGL/Audio/navigator の指紋偽装
-│   ├── stealthBrowser.js # 上記を束ねてステルス構成で起動
-│   └── index.js          # デモ（検出テストページのスクショ保存）
+├── stealth_lab/
+│   ├── utils.py            # 乱数・正規分布・非同期sleep
+│   ├── human_mouse.py      # WindMouse による人間らしいマウス軌跡
+│   ├── human_type.py       # 打鍵間隔のばらつき＋タイプミス訂正
+│   ├── fingerprint.py      # Canvas/WebGL/Audio/navigator の指紋偽装
+│   └── stealth_browser.py  # 上記を束ねてステルス構成で起動 (async)
 ├── examples/
-│   └── detect-test.js    # sannysoft / creepjs を巡回して結果保存
-├── package.json
+│   └── detect_test.py      # sannysoft / creepjs を巡回して結果保存
+├── main.py                 # デモのエントリポイント
+├── requirements.txt
 └── README.md
 ```
+
+> 💡 **指紋偽装(JS)は言語非依存**：`fingerprint.py` がブラウザに注入するのは“ブラウザ内で動く JS”。
+> Python からは `context.add_init_script(js_string)` に渡すだけ。JS版と中身は同じです。
 
 ---
 
 ## ⚙️ セットアップ & 実行
 
 ```bash
-npm install
-npx playwright install chromium   # ブラウザ本体を取得
+python -m venv .venv && source .venv/bin/activate   # 任意
+pip install -r requirements.txt
+playwright install chromium                         # ブラウザ本体を取得
 
-npm run demo          # bot.sannysoft.com で効果を確認（results/sannysoft.png）
-npm run test:detect   # sannysoft + creepjs を巡回
+python main.py                  # bot.sannysoft.com で効果を確認（results/sannysoft.png）
+python -m examples.detect_test  # sannysoft + creepjs を巡回
 ```
 
-`results/` に保存されたスクショで、緑（=検出回避OK）が多いほどステルスが効いています。
+`results/` のスクショで、緑（=検出回避OK）が多いほどステルスが効いています。
 
 ---
 
 ## 🧠 各テクニックの要点
 
-### 1. 指紋偽装 (`fingerprint.js`)
-`context.addInitScript` で **ページの全スクリプトより前** に注入する。
-- `navigator.webdriver` を `false` に
-- `Canvas` の `toDataURL` に**極小ノイズ**（seed固定で一貫性を保つ）
+### 1. 指紋偽装 (`fingerprint.py`)
+`context.add_init_script` で **ページの全スクリプトより前** に JS を注入。
+- `navigator.webdriver` を `false`
+- `Canvas.toDataURL` に **seed固定の極小ノイズ**
 - `WebGL` の VENDOR/RENDERER を実在GPU風に
 - `AudioContext` の波形に極小ノイズ
 - `permissions.query` の矛盾を解消
-👉 **最重要は「整合性」**。UA=Windows なら `platform=Win32`、`locale=ja-JP` なら `timezone=Asia/Tokyo`。矛盾は一発でバレる。
+👉 **最重要は「整合性」**。UA=Windows なら `platform=Win32`、`locale=ja-JP` なら `timezone=Asia/Tokyo`。
 
-### 2. 人間らしいマウス (`humanMouse.js`)
-**WindMouse** アルゴリズム：目標への「重力」＋ランダムな「風」を速度に加え続け、
-直線でない弧・微妙な揺れ・終端の減速を再現する。検出側は「直線で一瞬移動」を疑う。
+### 2. 人間らしいマウス (`human_mouse.py`)
+**WindMouse**：目標への「重力」＋ランダムな「風」を速度に加え続け、自然な弧・揺れ・終端の減速を再現。
 
-### 3. 人間らしいタイピング (`humanType.js`)
-打鍵間隔を正規分布でばらつかせ、空白・句読点で長めに止まり、たまに隣キーをミスして Backspace で訂正する。
+### 3. 人間らしいタイピング (`human_type.py`)
+打鍵間隔を正規分布でばらつかせ、句読点で長めに止まり、たまに隣キーをミスして Backspace 訂正。
 
-### 4. 起動オプション (`stealthBrowser.js`)
-- `playwright-extra` + stealth プラグインで既知フラグを一括除去
-- `--disable-blink-features=AutomationControlled`、`ignoreDefaultArgs: ['--enable-automation']`
-- `launchPersistentContext` で **永続プロファイル**（Cookie/履歴の“生活感”）
+### 4. 起動オプション (`stealth_browser.py`)
+- `--disable-blink-features=AutomationControlled`、`ignore_default_args=['--enable-automation']`
+- `launch_persistent_context` で **永続プロファイル**（Cookie/履歴の“生活感”）
+- `playwright-stealth` が入っていれば追加適用（無くても自前指紋で動く）
 
 ---
 
 ## 🧭 学習ロードマップ（どう勉強するか）
 
-**Step 0｜まず「検出される側」を見る**
-何も対策しない素の Playwright で `bot.sannysoft.com` を開き、赤い項目を確認する。
-→ 「何が検出されるのか」を体感するのが出発点。
+**Step 0｜「検出される側」を見る**
+対策なしの素の Playwright で `bot.sannysoft.com` を開き、赤い項目を確認 →「何が検出されるか」を体感。
 
 **Step 1｜足跡を1つずつ潰す**
-`fingerprint.js` のブロックを**1つだけ有効化**しては再テスト。
-`navigator.webdriver` → Canvas → WebGL… と、項目が緑に変わる様子を観察する。
-（“魔法の一括ライブラリ”ではなく、原理を1つずつ理解するのが目的）
+`fingerprint.py` の `_FP_JS` のブロックを**1つだけ有効化**しては再テスト。
+`navigator.webdriver` → Canvas → WebGL… と緑に変わる様子を観察（原理を1つずつ理解）。
 
 **Step 2｜挙動の自然さ**
-`humanMouse.js` の WindMouse のパラメータ（G/W/maxStep）を変えて、軌跡を可視化してみる。
-`page.on('console')` や軌跡を canvas に描くと違いが分かる。
+`wind_mouse()` の `G`/`W`/`max_step` を変えて軌跡を観察。点列を matplotlib で描くと違いが一目瞭然。
 
 **Step 3｜一貫性チェック**
-`creepjs` で **trust score** を見る。指紋は「強く隠す」より「矛盾なく一貫」が効く、を確認する。
+`creepjs` の **trust score** を見る。「強く隠す」より「矛盾なく一貫」が効く、を確認。
 
 **Step 4｜上級トピック（必要になったら）**
-- CDP 痕跡の隠蔽：`rebrowser-patches` / `patchright`
+- CDP 痕跡の隠蔽：`undetected-playwright` / `rebrowser-patches`
 - TLS/JA3 指紋（ブラウザ利用なら基本問題にならない理由）
-- reCAPTCHA v3 / Cloudflare Turnstile が「挙動スコア」で年々強くなっている現実
+- reCAPTCHA v3 / Cloudflare Turnstile が「挙動スコア」で年々強くなる現実
 
 ### 推奨の学び方
-- **手を動かす → 再テスト → 差分を観察** のループを回す
-- 1コミット＝1テクニック、で小さく試す
-- 「なぜ検出されるか（攻撃者視点）」と「なぜ防ぐか（防御者視点）」の両面で考える
+- **手を動かす → 再テスト → 差分を観察** のループ
+- 1コミット＝1テクニックで小さく試す
+- 「なぜ検出されるか（攻撃者視点）」「なぜ防ぐか（防御者視点）」の両面で考える
 
 ---
 
 ## 🔗 参考リンク
 
-- Playwright 公式: https://playwright.dev/
-- playwright-extra: https://github.com/berstend/puppeteer-extra/tree/master/packages/playwright-extra
+- Playwright (Python): https://playwright.dev/python/
+- playwright-stealth (PyPI): https://pypi.org/project/playwright-stealth/
 - 検出テスト（sannysoft）: https://bot.sannysoft.com/
 - 指紋一貫性（CreepJS）: https://abrahamjuliot.github.io/creepjs/
-- WindMouse アルゴリズム解説（BenLand100）: https://ben.land/post/2021/04/25/windmouse-human-mouse-movement/
+- WindMouse 解説（BenLand100）: https://ben.land/post/2021/04/25/windmouse-human-mouse-movement/
 
 ---
 
